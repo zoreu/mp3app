@@ -3,3 +3,4 @@ uvicorn
 yt-dlp
 ffmpeg-python
 websockets
+youtube-dl
