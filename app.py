@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import youtube_dl
+import yt_dlp
 import os
 import shutil
 from pathlib import Path
@@ -102,7 +102,7 @@ HTML_CONTENT = """
 class DownloadRequest(BaseModel):
     url: str
 
-# Configurações do youtube-dl com proxy e user-agent
+# Configurações do yt-dlp com proxy e user-agent
 YDL_OPTS = {
     'format': 'bestaudio/best',
     'postprocessors': [{
@@ -114,8 +114,13 @@ YDL_OPTS = {
     'noplaylist': True,
     'ffmpeg_location': '/usr/bin/ffmpeg',
     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'nocheckcertificate': True,
-    'proxy': 'http://sudo.wisp.uno:11870',  # Proxy adicionado
+    'extractor_args': {
+        'youtube': {
+            'player_client': 'web',  # Usa cliente web para evitar verificações de login
+        }
+    },
+    'no_check_certificate': True,
+    'proxy': 'http://sudo.wisp.uno:11870',  # Proxy especificado
 }
 
 # Função para excluir arquivo após um tempo
@@ -140,7 +145,7 @@ async def download_video(url: str):
             raise HTTPException(status_code=400, detail="Invalid YouTube URL")
 
         # Baixar e converter o vídeo
-        with youtube_dl.YoutubeDL(YDL_OPTS) as ydl:
+        with yt_dlp.YoutubeDL(YDL_OPTS) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info).rsplit('.', 1)[0] + '.mp3'
             filepath = Path(filename)
