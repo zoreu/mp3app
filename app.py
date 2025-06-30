@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import yt_dlp
+import youtube_dl
 import os
 import shutil
 from pathlib import Path
@@ -102,7 +102,7 @@ HTML_CONTENT = """
 class DownloadRequest(BaseModel):
     url: str
 
-# Configurações do yt-dlp para evitar necessidade de cookies
+# Configurações do youtube-dl com user-agent específico
 YDL_OPTS = {
     'format': 'bestaudio/best',
     'postprocessors': [{
@@ -114,12 +114,7 @@ YDL_OPTS = {
     'noplaylist': True,
     'ffmpeg_location': '/usr/bin/ffmpeg',
     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'extractor_args': {
-        'youtube': {
-            'player_client': 'web',  # Usa cliente web para evitar verificações de login
-        }
-    },
-    'no_check_certificate': True,  # Ignora verificações de certificado
+    'nocheckcertificate': True,
 }
 
 # Função para excluir arquivo após um tempo
@@ -144,7 +139,7 @@ async def download_video(url: str):
             raise HTTPException(status_code=400, detail="Invalid YouTube URL")
 
         # Baixar e converter o vídeo
-        with yt_dlp.YoutubeDL(YDL_OPTS) as ydl:
+        with youtube_dl.YoutubeDL(YDL_OPTS) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info).rsplit('.', 1)[0] + '.mp3'
             filepath = Path(filename)
@@ -221,7 +216,3 @@ async def cleanup_old_files():
 @app.on_event("startup")
 async def start_cleanup_task():
     asyncio.create_task(cleanup_old_files())
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=7860)
