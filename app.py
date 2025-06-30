@@ -112,7 +112,7 @@ YDL_OPTS = {
     }],
     'outtmpl': str(DOWNLOAD_DIR / '%(title)s.%(ext)s'),
     'noplaylist': True,
-    'ffmpeg_location': '/usr/bin/ffmpeg',  # Caminho padrão no Hugging Face
+    'ffmpeg_location': '/usr/bin/ffmpeg',
 }
 
 # Função para excluir arquivo após um tempo
