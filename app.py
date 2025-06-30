@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import yt_dlp
 import os
@@ -15,6 +16,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
+
+# Adicionar middleware CORS para extensões de navegador
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 
 # Montar diretório para arquivos estáticos
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -92,7 +102,7 @@ HTML_CONTENT = """
 class DownloadRequest(BaseModel):
     url: str
 
-# Configurações do yt-dlp
+# Configurações do yt-dlp para garantir 320kbps
 YDL_OPTS = {
     'format': 'bestaudio/best',
     'postprocessors': [{
@@ -102,6 +112,7 @@ YDL_OPTS = {
     }],
     'outtmpl': str(DOWNLOAD_DIR / '%(title)s.%(ext)s'),
     'noplaylist': True,
+    'ffmpeg_location': '/usr/bin/ffmpeg',  # Caminho padrão no Hugging Face
 }
 
 # Função para excluir arquivo após um tempo
@@ -125,7 +136,7 @@ async def download_video(url: str):
         if not url.startswith(('https://www.youtube.com', 'https://youtu.be')):
             raise HTTPException(status_code=400, detail="Invalid YouTube URL")
 
-        # Baixar o vídeo
+        # Baixar e converter o vídeo
         with yt_dlp.YoutubeDL(YDL_OPTS) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info).rsplit('.', 1)[0] + '.mp3'
@@ -166,9 +177,21 @@ async def download_video(url: str):
 # Função para limpar o diretório de downloads ao iniciar
 @app.on_event("startup")
 async def startup_event():
-    if DOWNLOAD_DIR.exists():
-        shutil.rmtree(DOWNLOAD_DIR)
-    DOWNLOAD_DIR.mkdir(exist_ok=True)
+    try:
+        # Não tentar excluir a pasta downloads, apenas limpar seu conteúdo
+        for file in DOWNLOAD_DIR.glob("*"):
+            try:
+                if file.is_file():
+                    file.unlink()
+                elif file.is_dir():
+                    shutil.rmtree(file, ignore_errors=True)
+                logger.info(f"Deleted {file} during startup")
+            except Exception as e:
+                logger.warning(f"Failed to delete {file} during startup: {str(e)}")
+        # Garantir que a pasta downloads existe
+        DOWNLOAD_DIR.mkdir(exist_ok=True)
+    except Exception as e:
+        logger.warning(f"Error cleaning downloads directory: {str(e)}")
 
 # Função para verificar e limpar arquivos antigos periodicamente
 async def cleanup_old_files():
