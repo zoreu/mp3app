@@ -102,7 +102,7 @@ HTML_CONTENT = """
 class DownloadRequest(BaseModel):
     url: str
 
-# Configurações do youtube-dl com user-agent específico
+# Configurações do youtube-dl com proxy e user-agent
 YDL_OPTS = {
     'format': 'bestaudio/best',
     'postprocessors': [{
@@ -115,6 +115,7 @@ YDL_OPTS = {
     'ffmpeg_location': '/usr/bin/ffmpeg',
     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
     'nocheckcertificate': True,
+    'proxy': 'http://sudo.wisp.uno:11870',  # Proxy adicionado
 }
 
 # Função para excluir arquivo após um tempo
