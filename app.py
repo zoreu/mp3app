@@ -102,7 +102,7 @@ HTML_CONTENT = """
 class DownloadRequest(BaseModel):
     url: str
 
-# Configurações do yt-dlp para garantir 320kbps
+# Configurações do yt-dlp para evitar necessidade de cookies
 YDL_OPTS = {
     'format': 'bestaudio/best',
     'postprocessors': [{
@@ -113,6 +113,13 @@ YDL_OPTS = {
     'outtmpl': str(DOWNLOAD_DIR / '%(title)s.%(ext)s'),
     'noplaylist': True,
     'ffmpeg_location': '/usr/bin/ffmpeg',
+    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    'extractor_args': {
+        'youtube': {
+            'player_client': 'web',  # Usa cliente web para evitar verificações de login
+        }
+    },
+    'no_check_certificate': True,  # Ignora verificações de certificado
 }
 
 # Função para excluir arquivo após um tempo
@@ -214,3 +221,7 @@ async def cleanup_old_files():
 @app.on_event("startup")
 async def start_cleanup_task():
     asyncio.create_task(cleanup_old_files())
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=7860)
