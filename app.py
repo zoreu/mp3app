@@ -121,6 +121,7 @@ YDL_OPTS = {
     },
     'no_check_certificate': True,
     'proxy': 'http://sudo.wisp.uno:11870',
+    'keepvideo': True,  # Manter arquivo temporário .webm
 }
 
 # Função para excluir arquivo após um tempo
@@ -130,6 +131,11 @@ async def delete_file_after_delay(filepath: Path, delay: int):
         if filepath.exists():
             filepath.unlink()
             logger.info(f"Deleted file: {filepath}")
+        # Excluir arquivo temporário .webm, se existir
+        webm_file = filepath.with_suffix('.webm')
+        if webm_file.exists():
+            webm_file.unlink()
+            logger.info(f"Deleted temporary file: {webm_file}")
     except Exception as e:
         logger.warning(f"Failed to delete file {filepath}: {str(e)}")
 
@@ -149,6 +155,7 @@ async def download_video(url: str):
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info).rsplit('.', 1)[0] + '.mp3'
             filepath = Path(filename)
+            logger.info(f"Generated file: {filepath}")
 
         if not filepath.exists():
             raise HTTPException(status_code=500, detail="Failed to convert to MP3")
@@ -172,7 +179,8 @@ async def download_video(url: str):
         try:
             current_time = time.time()
             for file in DOWNLOAD_DIR.glob("*.mp3"):
-                if file != filepath:  # Ignorar o arquivo recém-criado
+                # Evitar excluir o arquivo recém-criado (se definido)
+                if 'filepath' in locals() and file != filepath:
                     file_age = current_time - file.stat().st_mtime
                     if file_age > FILE_EXPIRATION_TIME:
                         try:
@@ -180,6 +188,14 @@ async def download_video(url: str):
                             logger.info(f"Deleted old file: {file}")
                         except Exception as e:
                             logger.warning(f"Failed to delete old file {file}: {str(e)}")
+            for file in DOWNLOAD_DIR.glob("*.webm"):
+                file_age = current_time - file.stat().st_mtime
+                if file_age > FILE_EXPIRATION_TIME:
+                    try:
+                        file.unlink()
+                        logger.info(f"Deleted old webm file: {file}")
+                    except Exception as e:
+                        logger.warning(f"Failed to delete old webm file {file}: {str(e)}")
         except Exception as e:
             logger.warning(f"Error cleaning up old files: {str(e)}")
 
@@ -198,8 +214,7 @@ async def startup_event():
             except Exception as e:
                 logger.warning(f"Failed to delete {file} during startup: {str(e)}")
         # Garantir que a pasta downloads existe
-        DOWNLOA
-D_DIR.mkdir(exist_ok=True)
+        DOWNLOAD_DIR.mkdir(exist_ok=True)
     except Exception as e:
         logger.warning(f"Error cleaning downloads directory: {str(e)}")
 
@@ -208,7 +223,7 @@ async def cleanup_old_files():
     while True:
         try:
             current_time = time.time()
-            for file in DOWNLOAD_DIR.glob("*.mp3"):
+            for file in DOWNLOAD_DIR.glob("*"):  # Limpar .mp3 e .webm
                 file_age = current_time - file.stat().st_mtime
                 if file_age > FILE_EXPIRATION_TIME:
                     try:
