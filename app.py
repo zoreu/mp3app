@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, WebSocket
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -9,7 +9,6 @@ from pathlib import Path
 import logging
 import asyncio
 import time
-import json
 
 # Configuração do logging
 logging.basicConfig(level=logging.INFO)
@@ -21,7 +20,8 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Diretório temporário para downloads
-DOWNLOAD_DIR = Path禁止
+DOWNLOAD_DIR = Path("downloads")
+DOWNLOAD_DIR.mkdir(exist_ok=True)
 
 # Tempo de expiração dos arquivos em segundos (10 minutos = 600 segundos)
 FILE_EXPIRATION_TIME = 600
@@ -73,28 +73,16 @@ HTML_CONTENT = """
 <body>
     <div class="container">
         <h1>YouTube to MP3 Downloader</h1>
-        <form id="downloadForm">
+        <form id="downloadForm" action="/download" method="get">
             <input type="text" id="url" name="url" placeholder="Enter YouTube URL" required>
             <button type="submit">Download MP3</button>
         </form>
         <div id="status"></div>
     </div>
     <script>
-        const ws = new WebSocket('ws://' + window.location.host + '/ws');
-        ws.onmessage = function(event) {
-            const data = JSON.parse(event.data);
+        document.getElementById('downloadForm').addEventListener('submit', function(event) {
             const statusDiv = document.getElementById('status');
-            statusDiv.textContent = data.message;
-            if (data.status === 'completed' && data.download_url) {
-                window.location.href = data.download_url;
-            }
-        };
-
-        document.getElementById('downloadForm').addEventListener('submit', async function(event) {
-            event.preventDefault();
-            const url = document.getElementById('url').value;
-            ws.send(JSON.stringify({ url: url }));
-            document.getElementById('status').textContent = 'Preparando áudio...';
+            statusDiv.textContent = 'Preparando áudio...';
         });
     </script>
 </body>
@@ -126,49 +114,39 @@ async def delete_file_after_delay(filepath: Path, delay: int):
     except Exception as e:
         logger.warning(f"Failed to delete file {filepath}: {str(e)}")
 
-# WebSocket para atualizações de status
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
+@app.get("/", response_class=HTMLResponse)
+async def home():
+    return HTML_CONTENT
+
+@app.get("/download")
+async def download_video(url: str):
     try:
-        data = await websocket.receive_json()
-        url = data.get("url")
+        # Validar URL
+        if not url.startswith(('https://www.youtube.com', 'https://youtu.be')):
+            raise HTTPException(status_code=400, detail="Invalid YouTube URL")
 
-        if not url or not url.startswith(('https://www.youtube.com', 'https://youtu.be')):
-            await websocket.send_json({"status": "error", "message": "Invalid YouTube URL"})
-            await websocket.close()
-            return
+        # Baixar o vídeo
+        with yt_dlp.YoutubeDL(YDL_OPTS) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info).rsplit('.', 1)[0] + '.mp3'
+            filepath = Path(filename)
 
-        try:
-            await websocket.send_json({"status": "processing", "message": "Preparando áudio..."})
-            
-            # Baixar o vídeo
-            with yt_dlp.YoutubeDL(YDL_OPTS) as ydl:
-                info = ydl.extract_info(url, download=True)
-                filename = ydl.prepare_filename(info).rsplit('.', 1)[0] + '.mp3'
-                filepath = Path(filename)
+        if not filepath.exists():
+            raise HTTPException(status_code=500, detail="Failed to convert to MP3")
 
-            if not filepath.exists():
-                await websocket.send_json({"status": "error", "message": "Failed to convert to MP3"})
-                await websocket.close()
-                return
+        # Iniciar tarefa de exclusão do arquivo após 10 minutos
+        asyncio.create_task(delete_file_after_delay(filepath, FILE_EXPIRATION_TIME))
 
-            # Enviar URL de download
-            download_url = f"/download/file?filename={filepath.name}"
-            await websocket.send_json({
-                "status": "completed",
-                "message": "Download concluído! Iniciando download...",
-                "download_url": download_url
-            })
+        # Retornar o arquivo
+        return FileResponse(
+            path=filepath,
+            filename=filepath.name,
+            media_type='audio/mpeg'
+        )
 
-            # Iniciar tarefa de exclusão do arquivo após 10 minutos
-            asyncio.create_task(delete_file_after_delay(filepath, FILE_EXPIRATION_TIME))
-
-        except Exception as e:
-            logger.error(f"Error downloading video: {str(e)}")
-            await websocket.send_json({"status": "error", "message": f"Error downloading video: {str(e)}"})
-            await websocket.close()
-            return
+    except Exception as e:
+        logger.error(f"Error downloading video: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error downloading video: {str(e)}")
 
     finally:
         # Limpar arquivos antigos imediatamente após o download
@@ -185,23 +163,6 @@ async def websocket_endpoint(websocket: WebSocket):
         except Exception as e:
             logger.warning(f"Error cleaning up old files: {str(e)}")
 
-# Rota para servir o arquivo
-@app.get("/download/file")
-async def serve_file(filename: str):
-    filepath = DOWNLOAD_DIR / filename
-    if not filepath.exists():
-        raise HTTPException(status_code=404, detail="File not found")
-    
-    return FileResponse(
-        path=filepath,
-        filename=filepath.name,
-        media_type='audio/mpeg'
-    )
-
-@app.get("/", response_class=HTMLResponse)
-async def home():
-    return HTML_CONTENT
-
 # Função para limpar o diretório de downloads ao iniciar
 @app.on_event("startup")
 async def startup_event():
@@ -209,7 +170,7 @@ async def startup_event():
         shutil.rmtree(DOWNLOAD_DIR)
     DOWNLOAD_DIR.mkdir(exist_ok=True)
 
-# Função para verificaraxi e limpar arquivos antigos periodicamente
+# Função para verificar e limpar arquivos antigos periodicamente
 async def cleanup_old_files():
     while True:
         try:
