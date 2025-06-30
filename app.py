@@ -116,11 +116,11 @@ YDL_OPTS = {
     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
     'extractor_args': {
         'youtube': {
-            'player_client': 'web',  # Usa cliente web para evitar verificações de login
+            'player_client': 'web',
         }
     },
     'no_check_certificate': True,
-    'proxy': 'http://sudo.wisp.uno:11870',  # Proxy especificado
+    'proxy': 'http://sudo.wisp.uno:11870',
 }
 
 # Função para excluir arquivo após um tempo
@@ -168,17 +168,18 @@ async def download_video(url: str):
         raise HTTPException(status_code=500, detail=f"Error downloading video: {str(e)}")
 
     finally:
-        # Limpar arquivos antigos imediatamente após o download
+        # Limpar arquivos antigos, exceto o arquivo recém-criado
         try:
             current_time = time.time()
             for file in DOWNLOAD_DIR.glob("*.mp3"):
-                file_age = current_time - file.stat().st_mtime
-                if file_age > FILE_EXPIRATION_TIME:
-                    try:
-                        file.unlink()
-                        logger.info(f"Deleted old file: {file}")
-                    except Exception as e:
-                        logger.warning(f"Failed to delete old file {file}: {str(e)}")
+                if file != filepath:  # Ignorar o arquivo recém-criado
+                    file_age = current_time - file.stat().st_mtime
+                    if file_age > FILE_EXPIRATION_TIME:
+                        try:
+                            file.unlink()
+                            logger.info(f"Deleted old file: {file}")
+                        except Exception as e:
+                            logger.warning(f"Failed to delete old file {file}: {str(e)}")
         except Exception as e:
             logger.warning(f"Error cleaning up old files: {str(e)}")
 
@@ -197,7 +198,8 @@ async def startup_event():
             except Exception as e:
                 logger.warning(f"Failed to delete {file} during startup: {str(e)}")
         # Garantir que a pasta downloads existe
-        DOWNLOAD_DIR.mkdir(exist_ok=True)
+        DOWNLOA
+D_DIR.mkdir(exist_ok=True)
     except Exception as e:
         logger.warning(f"Error cleaning downloads directory: {str(e)}")
 
