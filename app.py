@@ -34,7 +34,7 @@ DOWNLOAD_DIR = Path("downloads")
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
 # Tempo de expiração dos arquivos em segundos (10 minutos = 600 segundos)
-FILE_EXPIRATION_TIME = 600
+FILE_EXPIRATION_TIME = 900
 
 # HTML para a página inicial
 HTML_CONTENT = """
